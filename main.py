@@ -106,10 +106,10 @@ class VisualizerPublisher:
         Function that publishes game_state to self.topic
         '''
         global send_to_eval
-        #data = game_state._get_data_plain_text()
-        p1_action = game_state.get_dict().get("p1").get("action")
-        p2_action = game_state.get_dict().get("p2").get("action")
-        data = "P1 Action: " + p1_action + ", P2 Action: " + p2_action 
+        data = game_state._get_data_plain_text()
+        #p1_action = game_state.get_dict().get("p1").get("action")
+        #p2_action = game_state.get_dict().get("p2").get("action")
+        #data = "P1 Action: " + p1_action + ", P2 Action: " + p2_action 
         self.vis_publisher.publish(self.topic, data)
         send_to_eval = True # To be replaced with flag that ensures both players actions are updated before sending to eval_server for 2-player game
         
@@ -167,7 +167,7 @@ class RelayServer:
         self.relay_server_socket.bind(self.relay_server_addr)
         self.vis_publisher = vis_publisher
 
-    def serve_connection(self, connection, client_addr, id):
+    def serve_connection(self, connection, id):
         '''
         Function that continuously receives data from relay_client and updates the global game_state.
         '''
@@ -180,8 +180,7 @@ class RelayServer:
         global player2_pos
        
         while True:
-            move_data = connection.recv(2048) # Dummy message format currently. TO BE REPLACED WITH recv_data(connection)
-            move_data = move_data.decode("utf-8")
+            move_data = self.recv_data(connection)
             game_state_lock.acquire()
             if id == 1:
                 player1_move = identifyMove(move_data)
@@ -205,7 +204,7 @@ class RelayServer:
             id = i + 1 
             connection, client_addr = self.relay_server_socket.accept()
             print('Relay %s connected' % str(id))
-            relay_executor.submit(self.serve_connection, connection, client_addr, id)
+            relay_executor.submit(self.serve_connection, connection, id)
 
     def recv_data(self, connection):
         '''
@@ -219,6 +218,7 @@ class RelayServer:
             data = b''
             while not data.endswith(b'_'):
                 _d = connection.recv(1)
+                print(_d)
                 if not _d:
                     data = b''
                     break
@@ -227,6 +227,7 @@ class RelayServer:
                 self.stop()
 
             data = data.decode("utf-8")
+            print(data)
             length = int(data[:-1])
 
             data = b''
@@ -240,6 +241,7 @@ class RelayServer:
                 print('no more data from the client')
                 self.stop()
             relay_data = data.decode("utf8")  # Decode raw bytes to UTF-8
+            print(relay_data)
         except ConnectionResetError:
             print('Connection Reset')
             self.stop()

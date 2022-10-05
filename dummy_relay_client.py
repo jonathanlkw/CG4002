@@ -25,7 +25,6 @@ while True:
     try:
         #To be replaced with actual packets
         move_data = input('Enter a move: ')
-        #client_socket.send(move_data.encode('utf-8'))
         send_plaintext(client_socket, move_data)
     except ConnectionError:
         print('Connection lost')
