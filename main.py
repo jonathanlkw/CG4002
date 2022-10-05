@@ -20,8 +20,8 @@ player1_state = None
 player2_state = None
 player1_move = None
 player2_move = None
-player1_pos = None
-player2_pos = None
+player1_pos = None #Remove
+player2_pos = None #Remove
 player1_grenade_hit = 0
 player2_grenade_hit = 0
 
@@ -102,6 +102,9 @@ class VisualizerPublisher:
         print("Visualizer Publisher connected to MQTT Broker!")
         
     def publish(self, game_state):
+        '''
+        Function that publishes game_state to self.topic
+        '''
         global send_to_eval
         #data = game_state._get_data_plain_text()
         p1_action = game_state.get_dict().get("p1").get("action")
@@ -177,7 +180,7 @@ class RelayServer:
         global player2_pos
        
         while True:
-            move_data = connection.recv(2048) # Dummy message format currently
+            move_data = connection.recv(2048) # Dummy message format currently. TO BE REPLACED WITH recv_data(connection)
             move_data = move_data.decode("utf-8")
             game_state_lock.acquire()
             if id == 1:
@@ -204,6 +207,44 @@ class RelayServer:
             print('Relay %s connected' % str(id))
             relay_executor.submit(self.serve_connection, connection, client_addr, id)
 
+    def recv_data(self, connection):
+        '''
+        Function for receiving unencrypted data from relay_client.
+        Fbtained and modified from eval_server code.
+        '''
+        
+        relay_data = None
+        try:
+            # recv length followed by '_' followed by message
+            data = b''
+            while not data.endswith(b'_'):
+                _d = connection.recv(1)
+                if not _d:
+                    data = b''
+                    break
+                data += _d
+            if len(data) == 0:
+                self.stop()
+
+            data = data.decode("utf-8")
+            length = int(data[:-1])
+
+            data = b''
+            while len(data) < length:
+                _d = connection.recv(length - len(data))
+                if not _d:
+                    data = b''
+                    break
+                data += _d
+            if len(data) == 0:
+                print('no more data from the client')
+                self.stop()
+            relay_data = data.decode("utf8")  # Decode raw bytes to UTF-8
+        except ConnectionResetError:
+            print('Connection Reset')
+            self.stop()
+        return relay_data
+
     def stop(self):
         self.relay_server_socket.close()
 
@@ -225,12 +266,12 @@ class EvalClient:
 
     def recv_update(self):
         '''
-        function for receiving plaintext messages from eval_server
-        obtained and modified from eval_server code
+        Function for receiving unencrypted messages from eval_server.
+        Obtained and modified from eval_server code.
         '''
         game_state_received = None
         try:
-            # recv length followed by '_' followed by cypher
+            # recv length followed by '_' followed by message
             data = b''
             while not data.endswith(b'_'):
                 _d = self.client_socket.recv(1)

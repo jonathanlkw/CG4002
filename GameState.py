@@ -8,8 +8,8 @@ from Crypto.Util.Padding import pad
 
 class GameState:
     """
-    class for sending and receiving the game state json object
-    obtained and modified from eval_server code
+    Class for sending and receiving the game state json object.
+    Obtained and modified from eval_server code.
     """
     def __init__(self):
         self.player_1 = StateStaff()
