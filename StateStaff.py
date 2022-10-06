@@ -5,8 +5,13 @@ from Helper import Actions
 
 
 class StateStaff(PlayerStateBase):
+    '''
+    Class to update the player statistics.
+    Obtained and modified from eval_server code.
+    '''
+
     # update the player statistics
-    def update(self, pos_self, pos_opponent, action_self, action_opponent, action_opponent_is_valid):
+    def update(self, is_gun_hit, is_grenade_hit, action_self, action_opponent, action_opponent_is_valid):
         self.action = action_self
         
         # check if the shield has to reduced
@@ -28,14 +33,14 @@ class StateStaff(PlayerStateBase):
         
         # check for harm
         if action_opponent_is_valid:
-            if pos_self == 4 and pos_opponent != 4:
+            if (not is_gun_hit and not is_grenade_hit):
                 # we are protected from harm
                 pass
             else:
                 hp_reduction = 0
-                if action_opponent == Actions.shoot:
+                if (action_opponent == Actions.shoot) and is_gun_hit:
                     hp_reduction = self.bullet_hp
-                elif action_opponent == Actions.grenade:
+                elif action_opponent == Actions.grenade and is_grenade_hit:
                     hp_reduction = self.grenade_hp
                 if self.shield_time > 0:
                     if self.shield_health > 0:
@@ -77,7 +82,9 @@ class StateStaff(PlayerStateBase):
     def action_is_valid(self, action_self):
         ret = True
         # check if the shield has to reduced
-        if action_self == Actions.shield:
+        if action_self == Actions.no:
+            ret = False
+        elif action_self == Actions.shield:
             if self.shield_time > 0:
                 # invalid
                 ret = False
