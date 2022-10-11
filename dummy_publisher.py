@@ -75,8 +75,8 @@ class VisualizerSubscriber:
             decoded_msg_list = decoded_msg.split(":")
             if decoded_msg_list[0] == "P1":
                 player1_grenade_hit = int(decoded_msg_list[1].strip())
-            elif decoded_msg_list[2] == "P2":
-                player2_grenade_hit = int(decoded_msg_list[3].strip())
+            elif decoded_msg_list[0] == "P2":
+                player2_grenade_hit = int(decoded_msg_list[1].strip())
 
         self.vis_subscriber.subscribe(self.topic)
         self.vis_subscriber.on_message = on_message
@@ -110,14 +110,15 @@ if __name__ == '__main__':
     vis_subcriber = VisualizerSubscriber()
     vis_subcriber.connect_mqtt()
     vis_subcriber.subscribe()
-    time.sleep(2)
+    time.sleep(1)
     while True:
+        move_data = input('Enter a move: ')
         player1_move = Actions.all[random.randint(1,4)]
-        player1_state.update(player1_pos, player2_pos, player1_move, player2_move, player2_state.action_is_valid(player2_move))
+        player1_state.update(True, True, player1_move, player2_move, player2_state.action_is_valid(player2_move))
         player2_move = Actions.all[random.randint(1,4)]
-        player2_state.update(player2_pos, player1_pos, player2_move, player1_move, player1_state.action_is_valid(player1_move))
+        player2_state.update(True, True, player2_move, player1_move, player1_state.action_is_valid(player1_move))
         updateGamestate(player1_state, player2_state, vis_publisher)
         print(game_state._get_data_plain_text())
-        time.sleep(2)
+        #time.sleep(2)
     
 

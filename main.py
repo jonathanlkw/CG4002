@@ -9,24 +9,33 @@ import concurrent.futures
 from threading import Lock
 import random
 from paho.mqtt import client as mqtt_client
+import queue
 
 KEY = 'PLSPLSPLSPLSWORK'
-MAX_CONNECTIONS = 1
+MAX_CONNECTIONS = 2
+EVAL_IP = 'localhost'
+IDWINDOW = 10
 
-# Global variables for storage of game state
+#Global variables for storage of game state
 game_state = None
 
 player1_state = None
 player2_state = None
 player1_move = None
 player2_move = None
+player1_shoot = 0
+player2_shoot = 0
 player1_gun_hit = 0
 player2_gun_hit = 0
+player1_grenade = 0
+player2_grenade = 0
 player1_grenade_hit = 0
 player2_grenade_hit = 0
 
+update_queue = queue.Queue(1)
+p1_move_list = [[],[],[],[],[],[]]
+p2_move_list = [[],[],[],[],[],[]]
 program_ended = False
-send_to_eval = False
 game_state_lock = Lock()
 
 def initialize_gamestate():
@@ -38,8 +47,6 @@ def initialize_gamestate():
     global player2_state
     global player1_move
     global player2_move
-    global player1_pos
-    global player2_pos
 
     player1_state = StateStaff()
     player2_state = StateStaff()
@@ -53,7 +60,9 @@ def update_gamestate(p1_state, p2_state, vis_publisher):
     Function that updates the global game_state and immediately publishes the updated game_state to the broker.
     '''
     global game_state
+    game_state_lock.acquire()
     game_state.init_players(p1_state, p2_state)
+    game_state_lock.release()
     vis_publisher.publish(game_state)
 
 def replace_gamestate(updated_state, vis_publisher):
@@ -62,39 +71,69 @@ def replace_gamestate(updated_state, vis_publisher):
     '''
     global player1_state
     global player2_state
-    global send_to_eval
     player1_state.initialize_from_dict(updated_state.get('p1'))
     player2_state.initialize_from_dict(updated_state.get('p2'))
     update_gamestate(player1_state, player2_state, vis_publisher)
-    send_to_eval = False
 
-def identify_move(move_data, player_no):
+def parse_packets(move_data, publisher): #TO BE EDITED
+    '''
+    IMU IRt IRr
+    P1 0 1 2 
+    P2 3 4 5
+    '''
+    global player1_move
+    global player2_move
+    global player1_shoot
+    global player2_shoot
+    global player1_gun_hit
+    global player2_gun_hit
+    global player1_grenade
+    global player2_grenade
+    global p1_move_list
+    global p2_move_list
+
+    packet_list = move_data.split("_")
+    print(packet_list)
+    packet_type = int(packet_list[0])
+    print(packet_type)
+    if packet_type == 0:
+        for i in range(6):
+            p1_move_list[i] += [int(packet_list[i+1])]
+            print(p1_move_list)
+        if len(p1_move_list[5]) == IDWINDOW:
+            player1_move = identify_move(p1_move_list[0], p1_move_list[1], p1_move_list[2], p1_move_list[3], p1_move_list[4], p1_move_list[5])
+            p1_move_list = [[],[],[],[],[],[]]
+            update_gamestate(player1_state, player2_state, publisher)
+            update_queue.put(0, True)
+    elif packet_type == 1:
+        player1_shoot = 1
+        player1_move = Actions.shoot
+        update_gamestate(player1_state, player2_state, publisher)
+        update_queue.put(0, True)
+    elif packet_type == 2:
+        player1_gun_hit = 1
+    elif packet_type == 3:
+        for i in range(6):
+            p2_move_list[i] += [int(packet_list[i+1])]
+            print(p2_move_list)
+        if len(p2_move_list[5]) == IDWINDOW:
+            player2_move = identify_move(p2_move_list[0], p2_move_list[1], p2_move_list[2], p2_move_list[3], p2_move_list[4], p2_move_list[5])
+            p2_move_list = [[],[],[],[],[],[]]
+            update_gamestate(player1_state, player2_state, publisher)
+            update_queue.put(0, True)
+    elif packet_type == 4:
+        player2_shoot = 1
+        player2_move = Actions.shoot
+        update_gamestate(player1_state, player2_state, publisher)
+        update_queue.put(0, True)
+    elif packet_type == 5:
+        player2_gun_hit = 1
+
+def identify_move(ax, ay, az, gx, gy, gz):
     '''
     Function that identifies moves and updates appropriate flags
     '''
-    
-    global player1_gun_hit
-    global player2_gun_hit
-
-    packet_type = random.randint(0,3)
-    if player_no == 1:
-        if packet_type == 0: #shoot packet
-            return Actions.shoot
-        elif packet_type == 1: #hit packet
-            player1_gun_hit = 1
-            return Actions.no
-
-        identified_action = Actions.all[random.randint(2,4)] #REPLACE with AI function
-
-    if player_no == 2:
-        if packet_type == 0: #shoot packet
-            return Actions.shoot
-        elif packet_type == 1: #hit packet
-            player2_gun_hit = 1
-            return Actions.no
-
-        identified_action = Actions.all[random.randint(2,4)] #REPLACE with AI function
-    
+    identified_action = Actions.all[random.randint(2,4)] 
     return identified_action
 
 class VisualizerPublisher:
@@ -125,13 +164,11 @@ class VisualizerPublisher:
         '''
         Function that publishes game_state to self.topic
         '''
-        global send_to_eval
         data = game_state._get_data_plain_text()
         #p1_action = game_state.get_dict().get("p1").get("action")
         #p2_action = game_state.get_dict().get("p2").get("action")
         #data = "P1 Action: " + p1_action + ", P2 Action: " + p2_action 
         self.vis_publisher.publish(self.topic, data)
-        send_to_eval = True # To be replaced with flag that ensures both players actions are updated before sending to eval_server for 2-player game
         
     def close(self):
         self.vis_publisher.disconnect()
@@ -167,12 +204,10 @@ class VisualizerSubscriber:
             print(f"Received `{decoded_msg}` from `{msg.topic}` topic")
             decoded_msg_list = decoded_msg.split(":")
             #UPDATE CODE HERE FOR VISUALIZER FORMAT
-            game_state_lock.acquire() 
             if decoded_msg_list[0] == "P1":
                 player1_grenade_hit = int(decoded_msg_list[1].strip())
-            elif decoded_msg_list[2] == "P2":
-                player2_grenade_hit = int(decoded_msg_list[3].strip())
-            game_state_lock.release()
+            elif decoded_msg_list[0] == "P2":
+                player2_grenade_hit = int(decoded_msg_list[1].strip())
 
         self.vis_subscriber.subscribe(self.topic)
         self.vis_subscriber.on_message = on_message
@@ -206,20 +241,7 @@ class RelayServer:
        
         while True:
             move_data = self.recv_data(connection)
-            game_state_lock.acquire()
-            if id == 1:
-                player1_move = identify_move(move_data, 1)
-                player2_is_valid_move = player2_state.action_is_valid(player2_move)
-                player1_state.update(player1_gun_hit, player1_grenade_hit, player1_move, player2_move, player2_is_valid_move)
-                print('Player 1 move: %s' % player1_move)
-            else:
-                player2_move = identify_move(move_data, 2)
-                player1_is_valid_move = player1_state.action_is_valid(player1_move)
-                player2_state.update(player2_gun_hit, player2_grenade_hit, player2_move, player1_move, player1_is_valid_move)       
-                print('Player 2 move: %s' % player2_move)
-
-            update_gamestate(player1_state, player2_state, self.vis_publisher)
-            game_state_lock.release()
+            parse_packets(move_data, self.vis_publisher)
             
     def setup_connection(self):
         self.relay_server_socket.listen()
@@ -236,7 +258,7 @@ class RelayServer:
     def recv_data(self, connection):
         '''
         Function for receiving unencrypted data from relay_client.
-        Fbtained and modified from eval_server code.
+        Obtained and modified from eval_server code.
         '''
         
         relay_data = None
@@ -345,27 +367,22 @@ if __name__ == '__main__':
     relay_server = RelayServer(2021, vis_publisher)
     relay_server.setup_connection()
 
-    eval_client = EvalClient('localhost', 2022)
+    eval_client = EvalClient(EVAL_IP, 2022)
     eval_client.connect()
 
     while True:
-        try:
-            if send_to_eval:
-                eval_client.send_game_state(game_state)
-                updated_state = eval_client.recv_update()
-                game_state_lock.acquire()
-                replace_gamestate(updated_state, vis_publisher)
-                game_state_lock.release()
-        except ConnectionError:
-            print("Program Ended")
+        end = update_queue.get(True)
+        eval_client.send_game_state(game_state)
+        updated_state = eval_client.recv_update()
+        replace_gamestate(updated_state, vis_publisher)
+        if end:
             break
-        except KeyboardInterrupt:
-            print("Program Ended")
-            break
-
+    
     eval_client.stop()
     relay_server.stop()
     vis_publisher.close()
     vis_subcriber.close()
+    
+
 
 
