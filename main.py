@@ -6,15 +6,17 @@ from Helper import Actions
 from socket import *
 import traceback
 import concurrent.futures
-from threading import Lock
+import threading
 import random
 from paho.mqtt import client as mqtt_client
 import queue
+import time
 
 KEY = 'PLSPLSPLSPLSWORK'
 MAX_CONNECTIONS = 2
 EVAL_IP = 'localhost'
 IDWINDOW = 10
+HITWINDOW = 0.1
 
 #Global variables for storage of game state
 game_state = None
@@ -32,11 +34,42 @@ player2_grenade = 0
 player1_grenade_hit = 0
 player2_grenade_hit = 0
 
+hit_time_start = 0
+hit2_time_start = 0
+grenade_time_start = 0
+grenade2_time_start = 0
 update_queue = queue.Queue(1)
 p1_move_list = [[],[],[],[],[],[]]
 p2_move_list = [[],[],[],[],[],[]]
 program_ended = False
-game_state_lock = Lock()
+game_state_lock = threading.Lock()
+
+def print_flags():
+    '''
+    Function that prints all the game_state flags for checking purposes.
+    To be deleted.
+    '''
+    global player1_move
+    global player2_move
+    global player1_shoot
+    global player2_shoot
+    global player1_gun_hit
+    global player2_gun_hit
+    global player1_grenade
+    global player2_grenade
+    global player1_grenade_hit
+    global player2_grenade_hit 
+    print("P1 move: " + player1_move)
+    print("P2 move: " + player2_move)
+    print("P1 shoot: " + player1_shoot)
+    print("P2 shoot: " + player2_shoot)
+    print("P1 hit: " + player1_gun_hit)
+    print("P2 hit: " + player2_gun_hit)
+    print("P1 grenade: " + player1_grenade)
+    print("P2 grenade: " + player2_grenade)
+    print("P1 grenade hit: " + player1_grenade_hit)
+    print("P2 grenade hit: " + player2_grenade_hit)
+
 
 def initialize_gamestate():
     '''
@@ -91,39 +124,77 @@ def parse_packets(move_data, publisher): #TO BE EDITED
     global player2_grenade
     global p1_move_list
     global p2_move_list
+    global hit_time_start
+    global hit2_time_start
+    global grenade_time_start
+    global grenade2_time_start
 
     packet_list = move_data.split("_")
-    print(packet_list)
     packet_type = int(packet_list[0])
-    print(packet_type)
     if packet_type == 0:
         for i in range(6):
             p1_move_list[i] += [int(packet_list[i+1])]
             print(p1_move_list)
-        if len(p1_move_list[5]) == IDWINDOW:
+        if len(p1_move_list[5]) >= IDWINDOW:
             player1_move = identify_move(p1_move_list[0], p1_move_list[1], p1_move_list[2], p1_move_list[3], p1_move_list[4], p1_move_list[5])
-            p1_move_list = [[],[],[],[],[],[]]
-            update_gamestate(player1_state, player2_state, publisher)
-            update_queue.put(0, True)
+            if player1_move == Actions.grenade:
+                current_time = time.time()
+                if (grenade_time_start != 0):
+                    if (current_time - grenade_time_start >= HITWINDOW):
+                        p1_move_list = [[],[],[],[],[],[]]
+                        update_gamestate(player1_state, player2_state, publisher)
+                        grenade_time_start = 0
+                        update_queue.put(0, True)
+                else:
+                    grenade_time_start = time.time()
+            else:
+                p1_move_list = [[],[],[],[],[],[]]
+                update_gamestate(player1_state, player2_state, publisher)
+                update_queue.put(0, True)
     elif packet_type == 1:
         player1_shoot = 1
         player1_move = Actions.shoot
-        update_gamestate(player1_state, player2_state, publisher)
-        update_queue.put(0, True)
+        current_time = time.time()
+        if (hit_time_start != 0):
+            if (current_time - hit_time_start >= HITWINDOW):
+                update_gamestate(player1_state, player2_state, publisher)
+                hit_time_start = 0
+                update_queue.put(0, True)
+        else:
+            hit_time_start = time.time()
     elif packet_type == 2:
         player1_gun_hit = 1
     elif packet_type == 3:
         for i in range(6):
             p2_move_list[i] += [int(packet_list[i+1])]
             print(p2_move_list)
-        if len(p2_move_list[5]) == IDWINDOW:
+        if len(p2_move_list[5]) >= IDWINDOW:
             player2_move = identify_move(p2_move_list[0], p2_move_list[1], p2_move_list[2], p2_move_list[3], p2_move_list[4], p2_move_list[5])
-            p2_move_list = [[],[],[],[],[],[]]
-            update_gamestate(player1_state, player2_state, publisher)
-            update_queue.put(0, True)
+            if player2_move == Actions.grenade:
+                current_time = time.time()
+                if (grenade2_time_start != 0):
+                    if (current_time - grenade2_time_start >= HITWINDOW):
+                        p2_move_list = [[],[],[],[],[],[]]
+                        update_gamestate(player1_state, player2_state, publisher)
+                        grenade2_time_start = 0
+                        update_queue.put(0, True)
+                else:
+                    grenade2_time_start = time.time()
+            else:
+                p2_move_list = [[],[],[],[],[],[]]
+                update_gamestate(player1_state, player2_state, publisher)
+                update_queue.put(0, True)
     elif packet_type == 4:
         player2_shoot = 1
         player2_move = Actions.shoot
+        current_time = time.time()
+        if (hit2_time_start != 0):
+            if (current_time - hit2_time_start >= HITWINDOW):
+                update_gamestate(player1_state, player2_state, publisher)
+                hit2_time_start = 0
+                update_queue.put(0, True)
+        else:
+            hit2_time_start = time.time()
         update_gamestate(player1_state, player2_state, publisher)
         update_queue.put(0, True)
     elif packet_type == 5:
@@ -238,7 +309,7 @@ class RelayServer:
         global player2_gun_hit
         global player1_grenade_hit
         global player2_grenade_hit
-       
+
         while True:
             move_data = self.recv_data(connection)
             parse_packets(move_data, self.vis_publisher)
@@ -247,13 +318,13 @@ class RelayServer:
         self.relay_server_socket.listen()
         print('Relay Server waiting for connection')
 
-        relay_executor = concurrent.futures.ThreadPoolExecutor(MAX_CONNECTIONS)
+        self.relay_executor = concurrent.futures.ThreadPoolExecutor(MAX_CONNECTIONS)
         
         for i in range(MAX_CONNECTIONS):
             id = i + 1 
             connection, client_addr = self.relay_server_socket.accept()
             print('Relay %s connected' % str(id))
-            relay_executor.submit(self.serve_connection, connection, id)
+            self.relay_executor.submit(self.serve_connection, connection, id)
 
     def recv_data(self, connection):
         '''
@@ -294,6 +365,7 @@ class RelayServer:
         return relay_data
 
     def stop(self):
+        self.relay_executor.shutdown()
         self.relay_server_socket.close()
 
 
