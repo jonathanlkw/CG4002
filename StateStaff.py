@@ -81,13 +81,15 @@ class StateStaff(PlayerStateBase):
 
     def action_is_valid(self, action_self):
         ret = True
-        # check if the shield has to reduced
+       
         if action_self == Actions.no:
             ret = False
+
         elif action_self == Actions.shield:
             if self.shield_time > 0:
                 # invalid
                 ret = False
+
         elif action_self == Actions.shoot:
             if self.bullets <= 0:
                 # invalid
