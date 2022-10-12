@@ -7,7 +7,7 @@ def send_plaintext(remote_socket, msg):
 
     # ice_print_debug(f"Sending message to client: {plaintext} (Unencrypted)")
     # send len followed by '_' followed by cypher
-    m = str(len(plaintext))+'_'
+    m = (len(plaintext))+'_'
     try:
         remote_socket.sendall(m.encode("utf-8"))
         remote_socket.sendall(plaintext.encode("utf-8"))

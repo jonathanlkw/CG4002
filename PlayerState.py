@@ -3,6 +3,10 @@ from abc import abstractmethod
 
 
 class PlayerStateBase:
+    '''
+    Class that defines the player state.
+    Obtained and modified from eval_server code.
+    '''
     def __init__(self):
         self.max_grenades       = 2
         self.max_shields        = 3
@@ -99,7 +103,7 @@ class PlayerStateBase:
         self.num_deaths     = player_state.num_deaths
 
     @abstractmethod
-    def update(self, pos_self, pos_opponent, action_self,
+    def update(self, is_gun_hit, is_grenade_hit, action_self,
                action_opponent, action_opponent_is_valid):
         ...
 
