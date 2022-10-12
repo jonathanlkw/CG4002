@@ -195,6 +195,7 @@ def parse_packets(move_data, publisher): #TO BE EDITED
                 update_gamestate(player1_state, player2_state, publisher)
                 player1_grenade = 0
                 player2_grenade_hit = 0
+                player1_move = Actions.no
                 p2_grenade_hit_event.clear()
                 update_queue.put(0, True)
     elif packet_type == 1:
@@ -207,6 +208,7 @@ def parse_packets(move_data, publisher): #TO BE EDITED
         update_gamestate(player1_state, player2_state, publisher)
         player1_shoot = 0
         player2_gun_hit = 0
+        player1_move = Actions.no
         p2_gun_hit_event.clear()
         update_queue.put(0, True)
     elif packet_type == 2:
@@ -227,6 +229,7 @@ def parse_packets(move_data, publisher): #TO BE EDITED
                 update_gamestate(player1_state, player2_state, publisher)
                 player2_grenade = 0
                 player1_grenade_hit = 0
+                player2_move = Actions.no
                 p1_grenade_hit_event.clear()
                 update_queue.put(0, True)
     elif packet_type == 4:
@@ -239,6 +242,7 @@ def parse_packets(move_data, publisher): #TO BE EDITED
         update_gamestate(player1_state, player2_state, publisher)
         player2_shoot = 0
         player1_gun_hit = 0
+        player2_move = Actions.no
         p1_gun_hit_event.clear()
         update_queue.put(0, True)
     elif packet_type == 5:
