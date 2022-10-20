@@ -1,13 +1,12 @@
 from socket import *
 import sshtunnel
+import random
 
 def send_plaintext(remote_socket, msg):
     success = True
     plaintext = msg
 
-    # ice_print_debug(f"Sending message to client: {plaintext} (Unencrypted)")
-    # send len followed by '_' followed by cypher
-    m = (len(plaintext))+'_'
+    m = str(len(plaintext))+'_'
     try:
         remote_socket.sendall(m.encode("utf-8"))
         remote_socket.sendall(plaintext.encode("utf-8"))
@@ -40,7 +39,16 @@ with sshtunnel.open_tunnel(
         while True:
             try:
                 #To be replaced with actual packets
-                move_data = input('Enter a move: ')
+                user_input = input('Enter a move: ')
+                if (int(user_input) >= 0) and (int(user_input) <= 5):
+                    packet_type = int(user_input)
+                else:
+                    packet_type = random.randint(0,5)
+                if (packet_type == 0) or (packet_type == 3):
+                    move_data = str(packet_type) + '_' + str(random.randint(-1000,1000)) + '_' + str(random.randint(-1000,1000)) + '_' + str(random.randint(-1000,1000)) \
+                    + '_' + str(random.randint(-1000,1000)) + '_' + str(random.randint(-1000,1000)) + '_' + str(random.randint(-1000,1000))
+                else: 
+                    move_data = str(packet_type) + '_' + str(1)
                 send_plaintext(client_socket, move_data)
             except ConnectionError:
                 print('Connection lost')
