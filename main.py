@@ -37,8 +37,8 @@ player1_grenade_hit = 0
 player2_grenade_hit = 0
 
 p1_gun_hit_event = threading.Event()
-p1_grenade_hit_event = threading.Event()
 p2_gun_hit_event = threading.Event()
+p1_grenade_hit_event = threading.Event()
 p2_grenade_hit_event = threading.Event()
 update_queue = queue.Queue(1)
 p1_move_list = [[],[],[],[],[],[]]
@@ -120,7 +120,6 @@ def reset_p2_grenade_hit():
         t = threading.Timer(HITWINDOW, set_to_zero)
         t.start()
         p2_grenade_hit_event.clear()
-
 
 def initialize_gamestate():
     '''
