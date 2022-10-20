@@ -3,6 +3,7 @@ from GameState import GameState
 from PlayerState import PlayerStateBase
 from StateStaff import StateStaff
 from Helper import Actions
+from MoveIdentifier import identify_move
 from socket import *
 import traceback
 import concurrent.futures
@@ -10,11 +11,12 @@ import threading
 import random
 from paho.mqtt import client as mqtt_client
 import queue
+import sys
 
 KEY = 'PLSPLSPLSPLSWORK'
 MAX_CONNECTIONS = 2
-EVAL_IP = 'localhost'
-EVAL_PORT = 2022
+EVAL_IP = '0'
+EVAL_PORT = 0
 IDWINDOW = 10
 HITWINDOW = 0.1
 
@@ -153,8 +155,8 @@ def replace_gamestate(updated_state, vis_publisher):
     global player1_state
     global player2_state
     with game_state_lock:
-        player1_state.initialize_from_dict(updated_state.get('p1'))
-        player2_state.initialize_from_dict(updated_state.get('p2'))
+        player1_state.initialize_from_dict_eval(updated_state.get('p1'))
+        player2_state.initialize_from_dict_eval(updated_state.get('p2'))
     update_gamestate(player1_state, player2_state, vis_publisher)
 
 def parse_packets(move_data, publisher): #TO BE EDITED
@@ -177,6 +179,7 @@ def parse_packets(move_data, publisher): #TO BE EDITED
     global player2_grenade_hit
     global p1_move_list
     global p2_move_list
+    global program_ended
 
     packet_list = move_data.split("_")
     packet_type = int(packet_list[0])
@@ -189,9 +192,11 @@ def parse_packets(move_data, publisher): #TO BE EDITED
             if player1_move != Actions.no:
                 if player1_move == Actions.grenade:
                     p2_grenade_hit_event.wait(HITWINDOW)
+                if player1_move == Actions.logout:
+                    program_ended = True
                 with game_state_lock:
                     player1_state.update(player1_gun_hit, player1_grenade_hit, player1_move, player2_move, player2_state.action_is_valid(player2_move))
-                    player2_state.update(player2_gun_hit, player2_grenade_hit, player2_move, player1_move, player1_state.action_is_valid(player1_move))
+                    player2_state.update(1, 1, player2_move, player1_move, player1_state.action_is_valid(player1_move))
                 update_gamestate(player1_state, player2_state, publisher)
                 player1_grenade = 0
                 player2_grenade_hit = 0
@@ -204,7 +209,7 @@ def parse_packets(move_data, publisher): #TO BE EDITED
         p2_gun_hit_event.wait(HITWINDOW)
         with game_state_lock:
             player1_state.update(player1_gun_hit, player1_grenade_hit, player1_move, player2_move, player2_state.action_is_valid(player2_move))
-            player2_state.update(player2_gun_hit, player2_grenade_hit, player2_move, player1_move, player1_state.action_is_valid(player1_move))
+            player2_state.update(1, 1, player2_move, player1_move, player1_state.action_is_valid(player1_move))
         update_gamestate(player1_state, player2_state, publisher)
         player1_shoot = 0
         player2_gun_hit = 0
@@ -223,6 +228,8 @@ def parse_packets(move_data, publisher): #TO BE EDITED
             if player2_move != Actions.no: #RETHINK FOR 2 PLAYER GAME
                 if player2_move == Actions.grenade:
                     p1_grenade_hit_event.wait(HITWINDOW)
+                if player2_move == Actions.logout:
+                    program_ended = True
                 with game_state_lock:
                     player1_state.update(player1_gun_hit, player1_grenade_hit, player1_move, player2_move, player2_state.action_is_valid(player2_move))
                     player2_state.update(player2_gun_hit, player2_grenade_hit, player2_move, player1_move, player1_state.action_is_valid(player1_move))
@@ -248,15 +255,6 @@ def parse_packets(move_data, publisher): #TO BE EDITED
     elif packet_type == 5:
         player2_gun_hit = 1
         p2_gun_hit_event.set()
-    print_flags() # DEBUG!!
-
-def identify_move(ax, ay, az, gx, gy, gz):
-    '''
-    Function that identifies moves and updates appropriate flags
-    '''
-    #identified_action = Actions.all[random.randint(2,4)] 
-    identified_action = Actions.no
-    return identified_action
 
 class VisualizerPublisher:
     def __init__(self):
@@ -485,6 +483,13 @@ class EvalClient:
             pass
 
 if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print('Invalid number of arguments')
+        sys.exit()
+    EVAL_IP = sys.argv[1]
+    EVAL_PORT = int(sys.argv[2])
+    
+
     initialize_gamestate()
 
     vis_publisher = VisualizerPublisher()
@@ -508,7 +513,7 @@ if __name__ == '__main__':
     p2_hit_thread.start()
     p2_grenade_hit_thread.start()
 
-    while True:
+    while not program_ended:
         end = update_queue.get(True)
         eval_client.send_game_state(game_state)
         updated_state = eval_client.recv_update()
