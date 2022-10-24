@@ -5,7 +5,6 @@ from StateStaff import StateStaff
 from Helper import Actions
 from MoveIdentifier import identify_move
 from socket import *
-import traceback
 import concurrent.futures
 import threading
 import random
@@ -17,7 +16,7 @@ KEY = 'PLSPLSPLSPLSWORK'
 MAX_CONNECTIONS = 2
 EVAL_IP = '0'
 EVAL_PORT = 0
-IDWINDOW = 10
+IDWINDOW = 75
 HITWINDOW = 0.1
 
 #Global variables for storage of game state
@@ -35,6 +34,8 @@ player1_grenade = 0
 player2_grenade = 0
 player1_grenade_hit = 0
 player2_grenade_hit = 0
+player1_connected = 0
+player2_connected = 0
 
 p1_gun_hit_event = threading.Event()
 p2_gun_hit_event = threading.Event()
@@ -145,7 +146,7 @@ def update_gamestate(p1_state, p2_state, vis_publisher):
     global game_state
     with game_state_lock:
         game_state.init_players(p1_state, p2_state)
-    vis_publisher.publish(game_state)
+    vis_publisher.publish(game_state._get_data_plain_text())
 
 def replace_gamestate(updated_state, vis_publisher):
     '''
@@ -160,9 +161,9 @@ def replace_gamestate(updated_state, vis_publisher):
 
 def parse_packets(move_data, publisher): #TO BE EDITED
     '''
-    IMU IRt IRr
-    P1 0 1 2 
-    P2 3 4 5
+    IMU IRt IRr Connect
+    P1 0 1 2 6
+    P2 3 4 5 7
     '''
     global player1_state
     global player2_state
@@ -176,6 +177,8 @@ def parse_packets(move_data, publisher): #TO BE EDITED
     global player2_grenade
     global player1_grenade_hit
     global player2_grenade_hit
+    global player1_connected
+    global player2_connected
     global p1_move_list
     global p2_move_list
     global program_ended
@@ -254,6 +257,20 @@ def parse_packets(move_data, publisher): #TO BE EDITED
     elif packet_type == 5:
         player2_gun_hit = 1
         p2_gun_hit_event.set()
+    elif packet_type == 6:
+        player1_connected = packet_list[1]
+        if player1_connected:
+            publisher.publish("P1: connected")
+        else:
+            publisher.publish("P1: disconnected")
+    elif packet_type == 7:
+        player2_connected = packet_list[1]
+        if player2_connected:
+            publisher.publish("P2: connected")
+        else:
+            publisher.publish("P2: disconnected")
+        
+
 
 class VisualizerPublisher:
     def __init__(self):
@@ -279,11 +296,10 @@ class VisualizerPublisher:
         self.vis_publisher.connect(self.broker, self.port)
         print("Visualizer Publisher connected to MQTT Broker!")
         
-    def publish(self, game_state):
+    def publish(self, data):
         '''
-        Function that publishes game_state to self.topic
+        Function that publishes game_state and other messages to self.topic
         '''
-        data = game_state._get_data_plain_text()
         #p1_action = game_state.get_dict().get("p1").get("action")
         #p2_action = game_state.get_dict().get("p2").get("action")
         #data = "P1 Action: " + p1_action + ", P2 Action: " + p2_action 
@@ -352,19 +368,13 @@ class RelayServer:
         '''
         Function that continuously receives data from relay_client and updates the global game_state.
         '''
-        #global game_state
-        global player1_state
-        global player2_state
-        global player1_move
-        global player2_move
-        global player1_gun_hit
-        global player2_gun_hit
-        global player1_grenade_hit
-        global player2_grenade_hit
-
+        global player1_connected
+        global player2_connected
         while True:
-            move_data = self.recv_data(connection)
-            parse_packets(move_data, self.vis_publisher)
+            players_connected = player1_connected and player2_connected
+            if players_connected:
+                move_data = self.recv_data(connection)
+                parse_packets(move_data, self.vis_publisher)
             
     def setup_connection(self):
         self.relay_server_socket.listen()
@@ -512,13 +522,14 @@ if __name__ == '__main__':
     p2_hit_thread.start()
     p2_grenade_hit_thread.start()
 
+    _ = input("Press enter to start")
+    vis_publisher.publish("Start")
+
     while not program_ended:
-        end = update_queue.get(True)
+        update_queue.get(True)
         eval_client.send_game_state(game_state)
         updated_state = eval_client.recv_update()
         replace_gamestate(updated_state, vis_publisher)
-        if end:
-            break
     
     eval_client.stop()
     relay_server.stop()
