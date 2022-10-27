@@ -44,7 +44,7 @@ p2_grenade_hit_event = threading.Event()
 update_queue = queue.Queue(1)
 p1_move_list = [[],[],[],[],[],[]]
 p2_move_list = [[],[],[],[],[],[]]
-sending_enabled = False
+game_enabled = False
 program_ended = False
 game_state_lock = threading.Lock()
 
@@ -162,9 +162,9 @@ def replace_gamestate(updated_state, vis_publisher):
 
 def parse_packets(move_data, publisher): #TO BE EDITED
     '''
-    IMU IRt IRr Connect
-    P1 0 1 2 6
-    P2 3 4 5 7
+        IMU IRt IRr Connect
+    P1   0   1   2    6
+    P2   3   4   5    7
     '''
     global player1_state
     global player2_state
@@ -182,7 +182,7 @@ def parse_packets(move_data, publisher): #TO BE EDITED
     global player2_connected
     global p1_move_list
     global p2_move_list
-    global sending_enabled
+    global game_enabled
     global program_ended
 
     packet_list = move_data.split("_")
@@ -204,7 +204,7 @@ def parse_packets(move_data, publisher): #TO BE EDITED
         else:
             publisher.publish("P2: disconnected")
             print("P2: disconnected")
-    elif (player1_connected and player2_connected):
+    elif ((player1_connected and player2_connected) and game_enabled):
         if packet_type == 0:
             for i in range(6):
                 p1_move_list[i] += [int(packet_list[i+1])]
@@ -218,7 +218,7 @@ def parse_packets(move_data, publisher): #TO BE EDITED
                         program_ended = True
                     with game_state_lock:
                         player1_state.update(player1_gun_hit, player1_grenade_hit, player1_move, player2_move, player2_state.action_is_valid(player2_move))
-                        player2_state.update(1, 1, player2_move, player1_move, player1_state.action_is_valid(player1_move))
+                        player2_state.update(1, 1, player2_move, player1_move, player1_state.action_is_valid(player1_move)) #UPDATE
                     update_gamestate(player1_state, player2_state, publisher)
                     player1_grenade = 0
                     player2_grenade_hit = 0
@@ -232,7 +232,7 @@ def parse_packets(move_data, publisher): #TO BE EDITED
             p2_gun_hit_event.wait(HITWINDOW)
             with game_state_lock:
                 player1_state.update(player1_gun_hit, player1_grenade_hit, player1_move, player2_move, player2_state.action_is_valid(player2_move))
-                player2_state.update(1, 1, player2_move, player1_move, player1_state.action_is_valid(player1_move))
+                player2_state.update(1, 1, player2_move, player1_move, player1_state.action_is_valid(player1_move)) #UPDATE
             update_gamestate(player1_state, player2_state, publisher)
             player1_shoot = 0
             player2_gun_hit = 0
@@ -529,9 +529,9 @@ if __name__ == '__main__':
     p2_hit_thread.start()
     p2_grenade_hit_thread.start()
 
-    #_ = input("Press enter to start:")
-    #sending_enabled = True
-    #vis_publisher.publish("Start")
+    _ = input("Press enter to start:")
+    game_enabled = True
+    vis_publisher.publish("Start")
 
     while not program_ended:
         update_queue.get(True)
