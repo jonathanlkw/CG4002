@@ -112,6 +112,16 @@ class PlayerStateBase:
         self.num_shield     = player_state.num_shield
         self.num_deaths     = player_state.num_deaths
 
+    def initialize_from_player_state_eval(self, player_state, action):
+        self.hp             = player_state.hp
+        self.action         = action
+        self.bullets        = player_state.bullets
+        self.grenades       = player_state.grenades
+        self.shield_time    = player_state.shield_time
+        self.shield_health  = player_state.shield_health
+        self.num_shield     = player_state.num_shield
+        self.num_deaths     = player_state.num_deaths
+
     @abstractmethod
     def update(self, is_gun_hit, is_grenade_hit, action_self,
                action_opponent, action_opponent_is_valid):

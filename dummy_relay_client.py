@@ -1,6 +1,8 @@
 from socket import *
 import random
 
+IDWINDOW = 75
+
 server_name = 'localhost'
 server_port = 2021
 
@@ -29,11 +31,13 @@ while True:
         else:
             packet_type = random.randint(0,5)
         if (packet_type == 0) or (packet_type == 3):
-            move_data = str(packet_type) + '_' + str(random.randint(-1000,1000)) + '_' + str(random.randint(-1000,1000)) + '_' + str(random.randint(-1000,1000)) \
-            + '_' + str(random.randint(-1000,1000)) + '_' + str(random.randint(-1000,1000)) + '_' + str(random.randint(-1000,1000))
+            for i in range (IDWINDOW):
+                move_data = str(packet_type) + '_' + str(random.randint(-1000,1000)) + '_' + str(random.randint(-1000,1000)) + '_' + str(random.randint(-1000,1000)) \
+                + '_' + str(random.randint(-1000,1000)) + '_' + str(random.randint(-1000,1000)) + '_' + str(random.randint(-1000,1000))
+                send_plaintext(client_socket, move_data)
         else: 
             move_data = str(packet_type) + '_' + str(1)
-        send_plaintext(client_socket, move_data)
+            send_plaintext(client_socket, move_data)
     except ConnectionError:
         print('Connection lost')
         client_socket.close()

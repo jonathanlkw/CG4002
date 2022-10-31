@@ -9,5 +9,5 @@ def identify_move(ax, ay, az, gx, gy, gz):
     #identified_action = Actions.no
     #action_num = int(input("Enter Action Number: "))
     identified_action = action_list[random.randint(2,4)]
-    print(identified_action)
+    #print(identified_action)
     return identified_action
