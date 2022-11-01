@@ -24,7 +24,7 @@ with sshtunnel.open_tunnel(
     print('Connection to tunnel1 OK...')
     with sshtunnel.open_tunnel(
         ssh_address_or_host=('localhost', tunnel1.local_bind_port),
-        remote_bind_address=('localhost', 2021),
+        remote_bind_address=('localhost', 3021),
         ssh_username='xilinx',
         ssh_password='xilinx',
     ) as tunnel2:

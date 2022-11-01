@@ -250,7 +250,7 @@ def parse_packets(move_data, publisher): #TO BE EDITED
                     if player1_move == Actions.grenade:
                         p2_grenade_hit_event.wait(HITWINDOW)
                     if player1_move == Actions.logout:
-                        program_ended = True #CHECK LOGOUT CRITERIA
+                        update_queue.put(0, True)
                     with game_state_lock:
                         player1_state.update(player1_gun_hit, player1_grenade_hit, player1_move, Actions.no, player2_state.action_is_valid(Actions.no))
                         player2_state.update(player2_gun_hit, player2_grenade_hit, Actions.no, player1_move, player1_state.action_is_valid(player1_move)) 
@@ -293,7 +293,7 @@ def parse_packets(move_data, publisher): #TO BE EDITED
                     if player2_move == Actions.grenade:
                         p1_grenade_hit_event.wait(HITWINDOW)
                     if player2_move == Actions.logout:
-                        program_ended = True #CHECK LOGOUT CRITERIA
+                        update_queue.put(0, True)
                     with game_state_lock:
                         player1_state.update(player1_gun_hit, player1_grenade_hit, Actions.no, player2_move, player2_state.action_is_valid(player2_move))
                         player2_state.update(player2_gun_hit, player2_grenade_hit, player2_move, Actions.no, player1_state.action_is_valid(Actions.no))
@@ -576,7 +576,23 @@ if __name__ == '__main__':
 
     _ = input("Press enter to start:")
     program_ended = False
-    vis_publisher.publish("Start")
+    resend_command = 'y'
+    while resend_command == 'y':
+        vis_publisher.publish("Start")
+        print("Start")
+        if player1_connected:
+            vis_publisher.publish("P1: connected")
+            print("P1: connected")
+        else:
+            vis_publisher.publish("P1: disconnected")
+            print("P1: disconnected")
+        if player2_connected:
+            vis_publisher.publish("P2: connected")
+            print("P2: connected")
+        else:
+            vis_publisher.publish("P2: disconnected")
+            print("P2: disconnected")
+        resend_command = input("Resend start command?")
 
     while not program_ended:
         update_queue.get(True)
@@ -587,6 +603,8 @@ if __name__ == '__main__':
         p2_eval_state.initialize_from_player_state_eval(player2_state, player2_move)
         eval_game_state.init_players(p1_eval_state, p2_eval_state)
         eval_client.send_game_state(eval_game_state)
+        if (player1_move == Actions.logout or player2_move == Actions.logout):
+            program_ended = True
         player1_move = Actions.no
         player2_move = Actions.no
         updated_state = eval_client.recv_update()
