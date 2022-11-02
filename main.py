@@ -490,9 +490,10 @@ class EvalClient:
         client_socket = socket(AF_INET, SOCK_STREAM)
         client_socket.connect((self.server_name, self.server_port))
         self.client_socket = client_socket
+        print("Eval Client connected!")
         
-    def send_game_state(self, GameState: game_state):
-        success = game_state.send_encrypted_text(self.client_socket, KEY)
+    def send_game_state(self, gamestate):
+        success = gamestate.send_encrypted_text(self.client_socket, KEY)
         return success
 
     def recv_update(self):
@@ -548,6 +549,9 @@ if __name__ == '__main__':
 
     initialize_gamestate()
 
+    eval_client = EvalClient(EVAL_IP, EVAL_PORT)
+    eval_client.connect()
+
     vis_publisher = VisualizerPublisher()
     vis_publisher.connect_mqtt()
     vis_subcriber = VisualizerSubscriber()
@@ -556,9 +560,6 @@ if __name__ == '__main__':
 
     relay_server = RelayServer(RELAY_PORT, vis_publisher)
     relay_server.setup_connection()
-
-    eval_client = EvalClient(EVAL_IP, EVAL_PORT)
-    eval_client.connect()
 
     p1_hit_thread = threading.Thread(target = reset_p1_gun_hit)
     p2_hit_thread = threading.Thread(target = reset_p2_gun_hit)
@@ -575,7 +576,7 @@ if __name__ == '__main__':
     p2_updated_action_thread.start()
 
     _ = input("Press enter to start:")
-    program_ended = False
+    print("Game starting...")
     resend_command = 'y'
     while resend_command == 'y':
         vis_publisher.publish("Start")
@@ -593,6 +594,8 @@ if __name__ == '__main__':
             vis_publisher.publish("P2: disconnected")
             print("P2: disconnected")
         resend_command = input("Resend start command?")
+    program_ended = False
+    print("Game started!")
 
     while not program_ended:
         update_queue.get(True)
@@ -602,6 +605,7 @@ if __name__ == '__main__':
         p1_eval_state.initialize_from_player_state_eval(player1_state, player1_move)
         p2_eval_state.initialize_from_player_state_eval(player2_state, player2_move)
         eval_game_state.init_players(p1_eval_state, p2_eval_state)
+        print(eval_game_state._get_data_plain_text())
         eval_client.send_game_state(eval_game_state)
         if (player1_move == Actions.logout or player2_move == Actions.logout):
             program_ended = True
