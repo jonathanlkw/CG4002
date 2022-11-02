@@ -4,6 +4,7 @@ from PlayerState import PlayerStateBase
 from StateStaff import StateStaff
 from Helper import Actions
 from MoveIdentifier2 import identify_move
+from MoveIdentifier2 import identify_second_move
 from socket import *
 import concurrent.futures
 import threading
@@ -257,8 +258,8 @@ def parse_packets(move_data, publisher): #TO BE EDITED
                     update_gamestate(player1_state, player2_state, publisher)
                     player1_grenade = 0
                     player2_grenade_hit = 0
-                    print("P1: " + player1_move)
                     p2_grenade_hit_event.clear()
+                print("P1: " + player1_move)
                 if (player1_move != Actions.no) and (player2_move != Actions.no):
                     update_queue.put(0, True)
         elif packet_type == 1:
@@ -285,7 +286,7 @@ def parse_packets(move_data, publisher): #TO BE EDITED
                 else:
                     p2_move_list = [[],[],[],[],[],[]]
             if len(p2_move_list[5]) >= IDWINDOW:
-                player2_move = identify_move(p2_move_list[0], p2_move_list[1], p2_move_list[2], p2_move_list[3], p2_move_list[4], p2_move_list[5])
+                player2_move = identify_second_move(p2_move_list[0], p2_move_list[1], p2_move_list[2], p2_move_list[3], p2_move_list[4], p2_move_list[5])
                 p2_move_list = [[],[],[],[],[],[]]
                 if player2_move != Actions.no: 
                     player2_updated_action = 1
@@ -300,8 +301,8 @@ def parse_packets(move_data, publisher): #TO BE EDITED
                     update_gamestate(player1_state, player2_state, publisher)
                     player2_grenade = 0
                     player1_grenade_hit = 0
-                    print("P2: " + player2_move)
                     p1_grenade_hit_event.clear()
+                print("P2: " + player2_move)
                 if (player1_move != Actions.no) and (player2_move != Actions.no):
                     update_queue.put(0, True) #2P EVAL
         elif packet_type == 4:
