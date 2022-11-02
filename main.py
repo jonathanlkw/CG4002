@@ -3,7 +3,7 @@ from GameState import GameState
 from PlayerState import PlayerStateBase
 from StateStaff import StateStaff
 from Helper import Actions
-from MoveIdentifier import identify_move
+from MoveIdentifier2 import identify_move
 from socket import *
 import concurrent.futures
 import threading
@@ -16,8 +16,10 @@ KEY = 'PLSPLSPLSPLSWORK'
 MAX_CONNECTIONS = 2
 EVAL_IP = '0'
 EVAL_PORT = 0
+RELAY_PORT = 0
 IDWINDOW = 75
 HITWINDOW = 0.1
+BUFFERWINDOW = 1.5
 
 #Global variables for storage of game state
 game_state = None
@@ -34,18 +36,21 @@ player1_grenade = 0
 player2_grenade = 0
 player1_grenade_hit = 0
 player2_grenade_hit = 0
-player1_connected = 0
-player2_connected = 1 #EDIT FOR 2P GAME
+player1_connected = 1
+player2_connected = 1 
+player1_updated_action = 0
+player2_updated_action = 0
 
 p1_gun_hit_event = threading.Event()
 p2_gun_hit_event = threading.Event()
 p1_grenade_hit_event = threading.Event()
 p2_grenade_hit_event = threading.Event()
+p1_updated_action_event = threading.Event()
+p2_updated_action_event = threading.Event()
 update_queue = queue.Queue(1)
 p1_move_list = [[],[],[],[],[],[]]
 p2_move_list = [[],[],[],[],[],[]]
-game_enabled = False
-program_ended = False
+program_ended = True
 game_state_lock = threading.Lock()
 
 def print_flags():
@@ -123,6 +128,30 @@ def reset_p2_grenade_hit():
         t.start()
         p2_grenade_hit_event.clear()
 
+def reset_p1_updated_event():
+    global p1_updated_action_event
+    def set_to_zero():
+        global player1_updated_action
+        player1_updated_action = 0
+    
+    while True:
+        p1_updated_action_event.wait()
+        t = threading.Timer(BUFFERWINDOW, set_to_zero)
+        t.start()
+        p1_updated_action_event.clear()
+
+def reset_p2_updated_event():
+    global p2_updated_action_event
+    def set_to_zero():
+        global player2_updated_action
+        player2_updated_action = 0
+    
+    while True:
+        p2_updated_action_event.wait()
+        t = threading.Timer(BUFFERWINDOW, set_to_zero)
+        t.start()
+        p2_updated_action_event.clear()
+
 def initialize_gamestate():
     '''
     Function that sets all game stats to the starting values.
@@ -180,9 +209,10 @@ def parse_packets(move_data, publisher): #TO BE EDITED
     global player2_grenade_hit
     global player1_connected
     global player2_connected
+    global player1_updated_action
+    global player2_updated_action
     global p1_move_list
     global p2_move_list
-    global game_enabled
     global program_ended
 
     packet_list = move_data.split("_")
@@ -204,80 +234,90 @@ def parse_packets(move_data, publisher): #TO BE EDITED
         else:
             publisher.publish("P2: disconnected")
             print("P2: disconnected")
-    elif ((player1_connected and player2_connected) and game_enabled):
+    elif ((player1_connected and player2_connected) and (not program_ended)):
         if packet_type == 0:
             for i in range(6):
-                p1_move_list[i] += [int(packet_list[i+1])]
+                if not player1_updated_action:
+                    p1_move_list[i] += [int(packet_list[i+1])]
+                else:
+                    p1_move_list = [[],[],[],[],[],[]]
             if len(p1_move_list[5]) >= IDWINDOW:
                 player1_move = identify_move(p1_move_list[0], p1_move_list[1], p1_move_list[2], p1_move_list[3], p1_move_list[4], p1_move_list[5])
                 p1_move_list = [[],[],[],[],[],[]]
                 if player1_move != Actions.no:
+                    player1_updated_action = 1
+                    p1_updated_action_event.set()
                     if player1_move == Actions.grenade:
                         p2_grenade_hit_event.wait(HITWINDOW)
                     if player1_move == Actions.logout:
-                        program_ended = True
+                        update_queue.put(0, True)
                     with game_state_lock:
-                        player1_state.update(player1_gun_hit, player1_grenade_hit, player1_move, player2_move, player2_state.action_is_valid(player2_move))
-                        player2_state.update(1, 1, player2_move, player1_move, player1_state.action_is_valid(player1_move)) #UPDATE
+                        player1_state.update(player1_gun_hit, player1_grenade_hit, player1_move, Actions.no, player2_state.action_is_valid(Actions.no))
+                        player2_state.update(player2_gun_hit, player2_grenade_hit, Actions.no, player1_move, player1_state.action_is_valid(player1_move)) 
                     update_gamestate(player1_state, player2_state, publisher)
                     player1_grenade = 0
                     player2_grenade_hit = 0
                     print("P1: " + player1_move)
-                    player1_move = Actions.no
                     p2_grenade_hit_event.clear()
+                if (player1_move != Actions.no) and (player2_move != Actions.no):
                     update_queue.put(0, True)
         elif packet_type == 1:
             player1_shoot = 1
             player1_move = Actions.shoot
             p2_gun_hit_event.wait(HITWINDOW)
             with game_state_lock:
-                player1_state.update(player1_gun_hit, player1_grenade_hit, player1_move, player2_move, player2_state.action_is_valid(player2_move))
-                player2_state.update(1, 1, player2_move, player1_move, player1_state.action_is_valid(player1_move)) #UPDATE
+                player1_state.update(player1_gun_hit, player1_grenade_hit, player1_move, Actions.no, player2_state.action_is_valid(Actions.no))
+                player2_state.update(player2_gun_hit, player2_grenade_hit, Actions.no, player1_move, player1_state.action_is_valid(player1_move))
             update_gamestate(player1_state, player2_state, publisher)
             player1_shoot = 0
             player2_gun_hit = 0
             print("P1: " + player1_move)
-            player1_move = Actions.no
             p2_gun_hit_event.clear()
-            update_queue.put(0, True)
+            if (player1_move != Actions.no) and (player2_move != Actions.no):
+                update_queue.put(0, True)
         elif packet_type == 2:
             player1_gun_hit = 1
             p1_gun_hit_event.set()
         elif packet_type == 3:
             for i in range(6):
-                p2_move_list[i] += [int(packet_list[i+1])]
+                if not player2_updated_action:
+                    p2_move_list[i] += [int(packet_list[i+1])]
+                else:
+                    p2_move_list = [[],[],[],[],[],[]]
             if len(p2_move_list[5]) >= IDWINDOW:
                 player2_move = identify_move(p2_move_list[0], p2_move_list[1], p2_move_list[2], p2_move_list[3], p2_move_list[4], p2_move_list[5])
                 p2_move_list = [[],[],[],[],[],[]]
-                if player2_move != Actions.no: #RETHINK FOR 2 PLAYER GAME
+                if player2_move != Actions.no: 
+                    player2_updated_action = 1
+                    p2_updated_action_event.set()
                     if player2_move == Actions.grenade:
                         p1_grenade_hit_event.wait(HITWINDOW)
                     if player2_move == Actions.logout:
-                        program_ended = True
+                        update_queue.put(0, True)
                     with game_state_lock:
-                        player1_state.update(player1_gun_hit, player1_grenade_hit, player1_move, player2_move, player2_state.action_is_valid(player2_move))
-                        player2_state.update(player2_gun_hit, player2_grenade_hit, player2_move, player1_move, player1_state.action_is_valid(player1_move))
+                        player1_state.update(player1_gun_hit, player1_grenade_hit, Actions.no, player2_move, player2_state.action_is_valid(player2_move))
+                        player2_state.update(player2_gun_hit, player2_grenade_hit, player2_move, Actions.no, player1_state.action_is_valid(Actions.no))
                     update_gamestate(player1_state, player2_state, publisher)
                     player2_grenade = 0
                     player1_grenade_hit = 0
                     print("P2: " + player2_move)
-                    player2_move = Actions.no
                     p1_grenade_hit_event.clear()
-                    update_queue.put(0, True)
+                if (player1_move != Actions.no) and (player2_move != Actions.no):
+                    update_queue.put(0, True) #2P EVAL
         elif packet_type == 4:
             player2_shoot = 1
             player2_move = Actions.shoot
             p1_gun_hit_event.wait(HITWINDOW)
             with game_state_lock:
-                player1_state.update(player1_gun_hit, player1_grenade_hit, player1_move, player2_move, player2_state.action_is_valid(player2_move))
-                player2_state.update(player2_gun_hit, player2_grenade_hit, player2_move, player1_move, player1_state.action_is_valid(player1_move))
+                player1_state.update(player1_gun_hit, player1_grenade_hit, Actions.no, player2_move, player2_state.action_is_valid(player2_move))
+                player2_state.update(player2_gun_hit, player2_grenade_hit, player2_move, Actions.no, player1_state.action_is_valid(Actions.no))
             update_gamestate(player1_state, player2_state, publisher)
             player2_shoot = 0
             player1_gun_hit = 0
             print("P2: " + player2_move)
-            player2_move = Actions.no
             p1_gun_hit_event.clear()
-            update_queue.put(0, True)
+            if (player1_move != Actions.no) and (player2_move != Actions.no):
+                update_queue.put(0, True)
         elif packet_type == 5:
             player2_gun_hit = 1
             p2_gun_hit_event.set()
@@ -450,9 +490,10 @@ class EvalClient:
         client_socket = socket(AF_INET, SOCK_STREAM)
         client_socket.connect((self.server_name, self.server_port))
         self.client_socket = client_socket
+        print("Eval Client connected!")
         
-    def send_game_state(self, GameState: game_state):
-        success = game_state.send_encrypted_text(self.client_socket, KEY)
+    def send_game_state(self, gamestate):
+        success = gamestate.send_encrypted_text(self.client_socket, KEY)
         return success
 
     def recv_update(self):
@@ -499,14 +540,17 @@ class EvalClient:
             pass
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
+    if len(sys.argv) < 3:
         print('Invalid number of arguments')
         sys.exit()
     EVAL_IP = sys.argv[1]
     EVAL_PORT = int(sys.argv[2])
-    
+    RELAY_PORT = int(sys.argv[3])
 
     initialize_gamestate()
+
+    eval_client = EvalClient(EVAL_IP, EVAL_PORT)
+    eval_client.connect()
 
     vis_publisher = VisualizerPublisher()
     vis_publisher.connect_mqtt()
@@ -514,28 +558,59 @@ if __name__ == '__main__':
     vis_subcriber.connect_mqtt()
     vis_subcriber.subscribe()
 
-    relay_server = RelayServer(2021, vis_publisher)
+    relay_server = RelayServer(RELAY_PORT, vis_publisher)
     relay_server.setup_connection()
 
-    eval_client = EvalClient(EVAL_IP, EVAL_PORT)
-    eval_client.connect()
-
     p1_hit_thread = threading.Thread(target = reset_p1_gun_hit)
-    p1_grenade_hit_thread = threading.Thread(target = reset_p1_grenade_hit)
     p2_hit_thread = threading.Thread(target = reset_p2_gun_hit)
+    p1_grenade_hit_thread = threading.Thread(target = reset_p1_grenade_hit)
     p2_grenade_hit_thread = threading.Thread(target = reset_p2_grenade_hit)
+    p1_updated_action_thread = threading.Thread(target = reset_p1_updated_event)
+    p2_updated_action_thread = threading.Thread(target = reset_p2_updated_event)
+
     p1_hit_thread.start()
-    p1_grenade_hit_thread.start()
     p2_hit_thread.start()
+    p1_grenade_hit_thread.start()
     p2_grenade_hit_thread.start()
+    p1_updated_action_thread.start()
+    p2_updated_action_thread.start()
 
     _ = input("Press enter to start:")
-    game_enabled = True
-    vis_publisher.publish("Start")
+    print("Game starting...")
+    resend_command = 'y'
+    while resend_command == 'y':
+        vis_publisher.publish("Start")
+        print("Start")
+        if player1_connected:
+            vis_publisher.publish("P1: connected")
+            print("P1: connected")
+        else:
+            vis_publisher.publish("P1: disconnected")
+            print("P1: disconnected")
+        if player2_connected:
+            vis_publisher.publish("P2: connected")
+            print("P2: connected")
+        else:
+            vis_publisher.publish("P2: disconnected")
+            print("P2: disconnected")
+        resend_command = input("Resend start command?")
+    program_ended = False
+    print("Game started!")
 
     while not program_ended:
         update_queue.get(True)
-        eval_client.send_game_state(game_state)
+        p1_eval_state = StateStaff()
+        p2_eval_state = StateStaff()
+        eval_game_state = GameState()
+        p1_eval_state.initialize_from_player_state_eval(player1_state, player1_move)
+        p2_eval_state.initialize_from_player_state_eval(player2_state, player2_move)
+        eval_game_state.init_players(p1_eval_state, p2_eval_state)
+        print(eval_game_state._get_data_plain_text())
+        eval_client.send_game_state(eval_game_state)
+        if (player1_move == Actions.logout or player2_move == Actions.logout):
+            program_ended = True
+        player1_move = Actions.no
+        player2_move = Actions.no
         updated_state = eval_client.recv_update()
         replace_gamestate(updated_state, vis_publisher)
     
