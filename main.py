@@ -38,7 +38,7 @@ player2_grenade = 0
 player1_grenade_hit = 0
 player2_grenade_hit = 0
 player1_connected = 1
-player2_connected = 1 
+player2_connected = 1
 player1_updated_action = 0
 player2_updated_action = 0
 
@@ -48,6 +48,8 @@ p1_grenade_hit_event = threading.Event()
 p2_grenade_hit_event = threading.Event()
 p1_updated_action_event = threading.Event()
 p2_updated_action_event = threading.Event()
+p1_shoot_event = threading.Event()
+p2_shoot_event = threading.Event()
 update_queue = queue.Queue(1)
 p1_move_list = [[],[],[],[],[],[]]
 p2_move_list = [[],[],[],[],[],[]]
@@ -190,6 +192,58 @@ def replace_gamestate(updated_state, vis_publisher):
         player2_state.initialize_from_dict_eval(updated_state.get('p2'))
     update_gamestate(player1_state, player2_state, vis_publisher)
 
+def p1_shoot_update(publisher):
+    global player1_state
+    global player2_state
+    global player1_move
+    global player2_move
+    global player1_shoot
+    global player2_shoot
+    global player1_gun_hit
+    global player2_gun_hit
+    global player1_grenade_hit
+    global player2_grenade_hit
+
+    while True:
+        p1_shoot_event.wait()
+        p2_gun_hit_event.wait(HITWINDOW)
+        with game_state_lock:
+            player1_state.update(player1_gun_hit, player1_grenade_hit, player1_move, Actions.no, player2_state.action_is_valid(Actions.no))
+            player2_state.update(player2_gun_hit, player2_grenade_hit, Actions.no, player1_move, player1_state.action_is_valid(player1_move))
+        update_gamestate(player1_state, player2_state, publisher)
+        player1_shoot = 0
+        player2_gun_hit = 0
+        p2_gun_hit_event.clear()
+        p1_shoot_event.clear()
+        if (player1_move != Actions.no) and (player2_move != Actions.no):
+            update_queue.put(0, True)
+
+def p2_shoot_update(publisher):
+    global player1_state
+    global player2_state
+    global player1_move
+    global player2_move
+    global player1_shoot
+    global player2_shoot
+    global player1_gun_hit
+    global player2_gun_hit
+    global player1_grenade_hit
+    global player2_grenade_hit
+
+    while True:
+        p2_shoot_event.wait()
+        p1_gun_hit_event.wait(HITWINDOW)
+        with game_state_lock:
+            player1_state.update(player1_gun_hit, player1_grenade_hit, Actions.no, player2_move, player2_state.action_is_valid(player2_move))
+            player2_state.update(player2_gun_hit, player2_grenade_hit, player2_move, Actions.no, player1_state.action_is_valid(Actions.no))
+        update_gamestate(player1_state, player2_state, publisher)
+        player2_shoot = 0
+        player1_gun_hit = 0
+        p1_gun_hit_event.clear()
+        p2_shoot_event.clear()
+        if (player1_move != Actions.no) and (player2_move != Actions.no):
+            update_queue.put(0, True)
+
 def parse_packets(move_data, publisher): #TO BE EDITED
     '''
         IMU IRt IRr Connect
@@ -265,17 +319,8 @@ def parse_packets(move_data, publisher): #TO BE EDITED
         elif packet_type == 1:
             player1_shoot = 1
             player1_move = Actions.shoot
-            p2_gun_hit_event.wait(HITWINDOW)
-            with game_state_lock:
-                player1_state.update(player1_gun_hit, player1_grenade_hit, player1_move, Actions.no, player2_state.action_is_valid(Actions.no))
-                player2_state.update(player2_gun_hit, player2_grenade_hit, Actions.no, player1_move, player1_state.action_is_valid(player1_move))
-            update_gamestate(player1_state, player2_state, publisher)
-            player1_shoot = 0
-            player2_gun_hit = 0
+            p1_shoot_event.set()
             print("P1: " + player1_move)
-            p2_gun_hit_event.clear()
-            if (player1_move != Actions.no) and (player2_move != Actions.no):
-                update_queue.put(0, True)
         elif packet_type == 2:
             player1_gun_hit = 1
             p1_gun_hit_event.set()
@@ -308,17 +353,8 @@ def parse_packets(move_data, publisher): #TO BE EDITED
         elif packet_type == 4:
             player2_shoot = 1
             player2_move = Actions.shoot
-            p1_gun_hit_event.wait(HITWINDOW)
-            with game_state_lock:
-                player1_state.update(player1_gun_hit, player1_grenade_hit, Actions.no, player2_move, player2_state.action_is_valid(player2_move))
-                player2_state.update(player2_gun_hit, player2_grenade_hit, player2_move, Actions.no, player1_state.action_is_valid(Actions.no))
-            update_gamestate(player1_state, player2_state, publisher)
-            player2_shoot = 0
-            player1_gun_hit = 0
+            p2_shoot_event.set()
             print("P2: " + player2_move)
-            p1_gun_hit_event.clear()
-            if (player1_move != Actions.no) and (player2_move != Actions.no):
-                update_queue.put(0, True)
         elif packet_type == 5:
             player2_gun_hit = 1
             p2_gun_hit_event.set()
@@ -568,6 +604,8 @@ if __name__ == '__main__':
     p2_grenade_hit_thread = threading.Thread(target = reset_p2_grenade_hit)
     p1_updated_action_thread = threading.Thread(target = reset_p1_updated_event)
     p2_updated_action_thread = threading.Thread(target = reset_p2_updated_event)
+    p1_shoot_update_thread = threading.Thread(target = p1_shoot_update, args=(vis_publisher,))
+    p2_shoot_update_thread = threading.Thread(target = p2_shoot_update, args=(vis_publisher,))
 
     p1_hit_thread.start()
     p2_hit_thread.start()
@@ -575,6 +613,8 @@ if __name__ == '__main__':
     p2_grenade_hit_thread.start()
     p1_updated_action_thread.start()
     p2_updated_action_thread.start()
+    p1_shoot_update_thread.start()
+    p2_shoot_update_thread.start()
 
     _ = input("Press enter to start:")
     print("Game starting...")
@@ -608,7 +648,7 @@ if __name__ == '__main__':
         eval_game_state.init_players(p1_eval_state, p2_eval_state)
         print(eval_game_state._get_data_plain_text())
         eval_client.send_game_state(eval_game_state)
-        if (player1_move == Actions.logout or player2_move == Actions.logout):
+        if (player1_move == Actions.logout and player2_move == Actions.logout):
             program_ended = True
         player1_move = Actions.no
         player2_move = Actions.no
