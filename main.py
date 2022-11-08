@@ -222,7 +222,7 @@ def replace_gamestate(updated_state, vis_publisher):
 
 def make_connectivity_message(player_id, beetle_number, connection_status):
     player_list = ["P1: ", "P2: "]
-    beetle_list = ["glove-", "gun-", "belt-"]
+    beetle_list = ["glove-", "gun-", "belt-", "glove-", "gun-", "belt-"]
     connection_list = ["disconnected", "connected"]
     return player_list[player_id-1] + beetle_list[beetle_number] + connection_list[connection_status]
 
@@ -256,7 +256,7 @@ def parse_packets(move_data, publisher): #TO BE EDITED
 
     if (packet_type == 6 or packet_type == 7):
         connection_list[packet_list[1]] = packet_list[2]
-        connection_message = make_connectivity_message(1, packet_list[1], packet_list[2])
+        connection_message = make_connectivity_message(packet_list[0]-5, packet_list[1], packet_list[2])
         publisher.publish(connection_message)
         print(connection_message)
     elif not program_ended:
@@ -605,9 +605,13 @@ if __name__ == '__main__':
         print("Start")
         for i in range (6):
             if i < 3:
+                print(i)
+                print(connection_list[i])
                 connection_message = make_connectivity_message(1, i, connection_list[i])
                 vis_publisher.publish(connection_message)
             else:
+                print(i)
+                print(connection_list[i])
                 connection_message = make_connectivity_message(2, i, connection_list[i])
                 vis_publisher.publish(connection_message)
         resend_command = input("Resend start command? ")
