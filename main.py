@@ -37,10 +37,9 @@ player1_grenade = 0
 player2_grenade = 0
 player1_grenade_hit = 0
 player2_grenade_hit = 0
-player1_connected = 1
-player2_connected = 1
 player1_updated_action = 0
 player2_updated_action = 0
+connection_list = [0, 0, 0, 0, 0, 0]
 
 p1_gun_hit_event = threading.Event()
 p2_gun_hit_event = threading.Event()
@@ -221,6 +220,12 @@ def replace_gamestate(updated_state, vis_publisher):
         player2_state.initialize_from_dict_eval(updated_state.get('p2'))
     update_gamestate(player1_state, player2_state, vis_publisher)
 
+def make_connectivity_message(player_id, beetle_number, connection_status):
+    player_list = ["P1: ", "P2: "]
+    beetle_list = ["glove-", "gun-", "belt-"]
+    connection_list = ["disconnected", "connected"]
+    return player_list[player_id-1] + beetle_list[beetle_number] + connection_list[connection_status]
+
 def parse_packets(move_data, publisher): #TO BE EDITED
     '''
         IMU IRt IRr Connect
@@ -239,10 +244,9 @@ def parse_packets(move_data, publisher): #TO BE EDITED
     global player2_grenade
     global player1_grenade_hit
     global player2_grenade_hit
-    global player1_connected
-    global player2_connected
     global player1_updated_action
     global player2_updated_action
+    global connection_list
     global p1_move_list
     global p2_move_list
     global program_ended
@@ -250,23 +254,12 @@ def parse_packets(move_data, publisher): #TO BE EDITED
     packet_list = move_data.split("_")
     packet_type = int(packet_list[0])
 
-    if packet_type == 6:
-        player1_connected = int(packet_list[1])
-        if player1_connected:
-            publisher.publish("P1: connected")
-            print("P1: connected")
-        else:
-            publisher.publish("P1: disconnected")
-            print('P1: disconnected')
-    elif packet_type == 7:
-        player2_connected = int(packet_list[1])
-        if player2_connected:
-            publisher.publish("P2: connected")
-            print("P2: connected")
-        else:
-            publisher.publish("P2: disconnected")
-            print("P2: disconnected")
-    elif ((player1_connected and player2_connected) and (not program_ended)):
+    if (packet_type == 6 or packet_type == 7):
+        connection_list[packet_list[1]] = packet_list[2]
+        connection_message = make_connectivity_message(1, packet_list[1], packet_list[2])
+        publisher.publish(connection_message)
+        print(connection_message)
+    elif not program_ended:
         if packet_type == 0:
             for i in range(6):
                 if not player1_updated_action:
@@ -610,19 +603,14 @@ if __name__ == '__main__':
     while resend_command == 'y':
         vis_publisher.publish("Start")
         print("Start")
-        if player1_connected:
-            vis_publisher.publish("P1: connected")
-            print("P1: connected")
-        else:
-            vis_publisher.publish("P1: disconnected")
-            print("P1: disconnected")
-        if player2_connected:
-            vis_publisher.publish("P2: connected")
-            print("P2: connected")
-        else:
-            vis_publisher.publish("P2: disconnected")
-            print("P2: disconnected")
-        resend_command = input("Resend start command?")
+        for i in range (6):
+            if i < 3:
+                connection_message = make_connectivity_message(1, i, connection_list[i])
+                vis_publisher.publish(connection_message)
+            else:
+                connection_message = make_connectivity_message(2, i, connection_list[i])
+                vis_publisher.publish(connection_message)
+        resend_command = input("Resend start command? ")
     program_ended = False
     print("Game started!")
 
