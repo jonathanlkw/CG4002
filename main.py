@@ -255,8 +255,8 @@ def parse_packets(move_data, publisher): #TO BE EDITED
     packet_type = int(packet_list[0])
 
     if (packet_type == 6 or packet_type == 7):
-        connection_list[packet_list[1]] = packet_list[2]
-        connection_message = make_connectivity_message(packet_list[0]-5, packet_list[1], packet_list[2])
+        connection_list[int(packet_list[1])] = int(packet_list[2])
+        connection_message = make_connectivity_message(int(packet_list[0])-5, int(packet_list[1]), int(packet_list[2]))
         publisher.publish(connection_message)
         print(connection_message)
     elif not program_ended:
@@ -605,15 +605,12 @@ if __name__ == '__main__':
         print("Start")
         for i in range (6):
             if i < 3:
-                print(i)
-                print(connection_list[i])
                 connection_message = make_connectivity_message(1, i, connection_list[i])
                 vis_publisher.publish(connection_message)
             else:
-                print(i)
-                print(connection_list[i])
                 connection_message = make_connectivity_message(2, i, connection_list[i])
                 vis_publisher.publish(connection_message)
+            print(connection_message)
         resend_command = input("Resend start command? ")
     program_ended = False
     print("Game started!")
