@@ -19,8 +19,8 @@ EVAL_IP = '0'
 EVAL_PORT = 0
 RELAY_PORT = 0
 IDWINDOW = 75
-HITWINDOW = 0.1
-BUFFERWINDOW = 3
+HITWINDOW = 0.05
+BUFFERWINDOW = 1.5
 
 #Global variables for storage of game state
 game_state = None
@@ -150,8 +150,10 @@ def p1_handle_id_move(publisher):
             player1_grenade = 0
             player2_grenade_hit = 0
             p2_grenade_hit_event.clear()
-            p1_move_id_event.clear()
-            print("P1: " + player1_move)
+        else:
+            player1_updated_action = 0
+        p1_move_id_event.clear()
+        print("P1: " + player1_move)
         if (player1_move != Actions.no) and (player2_move != Actions.no):
             update_queue.put(0, True)
 
@@ -178,8 +180,10 @@ def p2_handle_id_move(publisher):
             player2_grenade = 0
             player1_grenade_hit = 0
             p1_grenade_hit_event.clear()
-            p2_move_id_event.clear()
-            print("P2: " + player2_move)
+        else:
+            player2_updated_action = 0
+        p2_move_id_event.clear()
+        print("P2: " + player2_move)
         if (player1_move != Actions.no) and (player2_move != Actions.no):
             update_queue.put(0, True)
 
@@ -207,6 +211,7 @@ def update_gamestate(p1_state, p2_state, vis_publisher):
     global game_state
     with game_state_lock:
         game_state.init_players(p1_state, p2_state)
+    #print(game_state._get_data_plain_text())
     vis_publisher.publish(game_state._get_data_plain_text())
 
 def replace_gamestate(updated_state, vis_publisher):
@@ -215,9 +220,22 @@ def replace_gamestate(updated_state, vis_publisher):
     '''
     global player1_state
     global player2_state
-    with game_state_lock:
-        player1_state.initialize_from_dict_eval(updated_state.get('p1'))
-        player2_state.initialize_from_dict_eval(updated_state.get('p2'))
+    global player1_move
+    global player2_move
+    if (player1_move != Actions.shield and updated_state.get('p1').get('action') == Actions.shield):
+        with game_state_lock:
+            player1_state.initialize_from_dict_eval_invalid_shield(updated_state.get('p1'))
+    else:
+        with game_state_lock:
+            player1_state.initialize_from_dict_eval(updated_state.get('p1'))
+    if (player2_move != Actions.shield and updated_state.get('p2').get('action') == Actions.shield):
+        with game_state_lock:
+            player2_state.initialize_from_dict_eval_invalid_shield(updated_state.get('p2'))
+    else:
+        with game_state_lock:
+            player2_state.initialize_from_dict_eval(updated_state.get('p2'))
+    player1_move = Actions.no
+    player2_move = Actions.no
     update_gamestate(player1_state, player2_state, vis_publisher)
 
 def make_connectivity_message(player_id, beetle_number, connection_status):
@@ -226,7 +244,7 @@ def make_connectivity_message(player_id, beetle_number, connection_status):
     connection_list = ["disconnected", "connected"]
     return player_list[player_id-1] + beetle_list[beetle_number] + connection_list[connection_status]
 
-def parse_packets(move_data, publisher): #TO BE EDITED
+def parse_packets(move_data, publisher): 
     '''
         IMU IRt IRr Connect
     P1   0   1   2    6
@@ -263,8 +281,8 @@ def parse_packets(move_data, publisher): #TO BE EDITED
         if packet_type == 0:
             for i in range(6):
                 if not player1_updated_action:
-                    p1_move_list[i] += [int(packet_list[i+1])]
-            if len(p1_move_list[5]) >= IDWINDOW:   
+                    p1_move_list[i] += [int(packet_list[i+1])]          
+            if (len(p1_move_list[5]) >= IDWINDOW and not player1_updated_action):   
                 # player1_move = identify_move(p1_move_list[0], p1_move_list[1], p1_move_list[2], p1_move_list[3], p1_move_list[4], p1_move_list[5])
                 # p1_move_list = [[],[],[],[],[],[]]
                 # if player1_move != Actions.no:
@@ -304,7 +322,7 @@ def parse_packets(move_data, publisher): #TO BE EDITED
             for i in range(6):
                 if not player2_updated_action:
                     p2_move_list[i] += [int(packet_list[i+1])]
-            if len(p2_move_list[5]) >= IDWINDOW:
+            if (len(p2_move_list[5]) >= IDWINDOW and not player2_updated_action):
                 # player2_move = identify_second_move(p2_move_list[0], p2_move_list[1], p2_move_list[2], p2_move_list[3], p2_move_list[4], p2_move_list[5])
                 # p2_move_list = [[],[],[],[],[],[]]
                 # if player2_move != Actions.no: 
@@ -627,8 +645,6 @@ if __name__ == '__main__':
         eval_client.send_game_state(eval_game_state)
         if (player1_move == Actions.logout and player2_move == Actions.logout):
             program_ended = True
-        player1_move = Actions.no
-        player2_move = Actions.no
         updated_state = eval_client.recv_update()
         replace_gamestate(updated_state, vis_publisher)
     

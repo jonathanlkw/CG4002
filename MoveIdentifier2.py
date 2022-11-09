@@ -6,7 +6,7 @@ def identify_move(ax, ay, az, gx, gy, gz):
     '''
     Function that identifies moves and updates appropriate flags
     '''
-    time.sleep(random.uniform(5.0, 10.0))
+    time.sleep(random.uniform(3.0, 6.0))
     action_list = Actions.all + [Actions.logout]
     #identified_action = Actions.no
     #action_num = int(input("Enter Action Number: "))
@@ -19,7 +19,7 @@ def identify_second_move(ax, ay, az, gx, gy, gz):
     '''
     Function that identifies moves and updates appropriate flags
     '''
-    time.sleep(random.uniform(5.0, 10.0))
+    time.sleep(random.uniform(3.0, 6.0))
     action_list = Actions.all + [Actions.logout]
     #identified_action = Actions.no
     #action_num = int(input("Enter Action Number: "))

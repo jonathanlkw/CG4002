@@ -102,6 +102,16 @@ class PlayerStateBase:
         self.num_shield     = int(player_dict['num_shield'])
         self.num_deaths     = int(player_dict['num_deaths'])
 
+    def initialize_from_dict_eval_invalid_shield(self, player_dict: dict):
+        self.hp             = int(player_dict['hp'])
+        self.action         = 'none'
+        self.bullets        = int(player_dict['bullets'])
+        self.grenades       = int(player_dict['grenades'])
+        self.shield_time    = float(0.0)
+        self.shield_health  = int(0)
+        self.num_shield     = int(player_dict['num_shield'])
+        self.num_deaths     = int(player_dict['num_deaths'])
+
     def initialize_from_player_state(self, player_state):
         self.hp             = player_state.hp
         self.action         = player_state.action
