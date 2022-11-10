@@ -26,14 +26,14 @@ def send_plaintext(remote_socket, msg):
 while True:
     try:
         #To be replaced with actual packets
-        #user_input = input('Enter a move: ')
-        #if (int(user_input) >= 0) and (int(user_input) <= 5):
-        #    packet_type = int(user_input)
-        #else:
-        #    packet_type = random.randint(0,5)
+        user_input = input('Enter a move: ')
+        if (int(user_input) >= 0) and (int(user_input) <= 5):
+            packet_type = int(user_input)
+        else:
+            packet_type = random.randint(0,5)
         
-        time.sleep(random.uniform(0.1, 0.5))
-        packet_type = random.randint(0,5)
+        #time.sleep(random.uniform(0.1, 0.5))
+        #packet_type = random.randint(0,5)
 
         if (packet_type == 0) or (packet_type == 3):
             for i in range (IDWINDOW):
